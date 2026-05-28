@@ -97,19 +97,27 @@ async function main() {
         console.log(`📤 回复: ${reply.slice(0, 120)}`);
 
         // 发回微信
-        const result = await sendMessage(
-          cred.token,
-          fromUser,            // toUserId
-          reply,               // text
-          msg.contextToken,    // contextToken
-          cred.accountId,      // clientId
-          cred.baseUrl,        // baseUrl
-        );
+        let sendResult: any;
+        try {
+          console.log(`[adamas] 📡 发送中... to=${fromUser.slice(0,20)}`);
+          sendResult = await sendMessage(
+            cred.token,
+            fromUser,            // toUserId
+            reply,               // text
+            msg.contextToken,    // contextToken
+            cred.accountId,      // clientId
+            cred.baseUrl,        // baseUrl
+          );
+          console.log(`[adamas] 📡 发送结果: ${JSON.stringify(sendResult)}`);
+        } catch (sendErr: any) {
+          console.error(`[adamas] ❌ 发送异常: ${sendErr.message}`);
+          continue;  // 跳过这条，继续处理其他消息
+        }
 
-        if (result.ok) {
+        if (sendResult?.ok) {
           console.log(`[adamas] ✅ 发送成功`);
         } else {
-          console.error(`[adamas] ❌ 发送失败: errcode=${result.errcode} errmsg=${result.errmsg}`);
+          console.error(`[adamas] ❌ 发送失败: ${JSON.stringify(sendResult)}`);
         }
       }
     } catch (err: any) {

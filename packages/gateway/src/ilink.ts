@@ -24,7 +24,7 @@ function randomWechatUin(): string {
   return Buffer.from(String(v)).toString("base64");
 }
 
-function makeHeaders(token?: string, bodyLen?: number): Record<string, string> {
+function makeHeaders(token?: string, bodyStr?: string): Record<string, string> {
   const h: Record<string, string> = {
     "Content-Type": "application/json",
     "AuthorizationType": "ilink_bot_token",
@@ -32,7 +32,7 @@ function makeHeaders(token?: string, bodyLen?: number): Record<string, string> {
     "iLink-App-Id": ILINK_APP_ID,
     "iLink-App-ClientVersion": String(ILINK_APP_CLIENT_VERSION),
   };
-  if (bodyLen) h["Content-Length"] = String(bodyLen);
+  if (bodyStr) h["Content-Length"] = String(Buffer.byteLength(bodyStr, "utf-8"));
   if (token) h["Authorization"] = `Bearer ${token}`;
   return h;
 }
@@ -67,7 +67,7 @@ async function apiPost(
   const url = `${ILINK_BASE_URL}/${endpoint}`;
   const resp = await fetch(url, {
     method: "POST",
-    headers: makeHeaders(token, bodyStr.length),
+    headers: makeHeaders(token, bodyStr),
     body: bodyStr,
     signal: AbortSignal.timeout(timeoutMs),
   });
@@ -206,7 +206,7 @@ export async function getUpdates(
 
     const resp = await fetch(url, {
       method: "POST",
-      headers: makeHeaders(token, bodyStr.length),
+      headers: makeHeaders(token, bodyStr),
       body: bodyStr,
       signal: AbortSignal.timeout(LONG_POLL_TIMEOUT_MS + 5000),
     });
@@ -274,7 +274,7 @@ export async function sendMessage(
 
   const resp = await fetch(url, {
     method: "POST",
-    headers: makeHeaders(token, bodyStr.length),
+    headers: makeHeaders(token, bodyStr),
     body: bodyStr,
     signal: AbortSignal.timeout(API_TIMEOUT_MS),
   });
