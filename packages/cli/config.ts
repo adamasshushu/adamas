@@ -26,6 +26,24 @@ function loadEnvFile(filePath: string) {
 loadEnvFile(path.resolve(__currentDir, "../..", ".env"));
 loadEnvFile(path.resolve(process.env.HOME || "/tmp", ".adamas", ".env"));
 
+/** 从 ~/.hermes/config.yaml 自动提取 API key（终极兜底） */
+function loadHermesApiKey(): { apiKey: string; provider?: string; model?: string; baseUrl?: string } {
+  const result: any = { apiKey: "" };
+  try {
+    const hermesConfig = path.resolve(process.env.HOME || "/tmp", ".hermes", "config.yaml");
+    if (!fs.existsSync(hermesConfig)) return result;
+    const raw = fs.readFileSync(hermesConfig, "utf-8");
+    const cfg = yaml.parse(raw);
+    const m = cfg?.model;
+    if (!m) return result;
+    result.apiKey = m.api_key || "";
+    result.provider = m.provider || "";
+    result.model = m.default || "";
+    result.baseUrl = m.base_url || "";
+  } catch { /* hermes not installed */ }
+  return result;
+}
+
 const DEFAULT_CONFIG: AdamasConfig = {
   model: {
     provider: "deepseek",
@@ -53,6 +71,16 @@ export async function loadConfig(opts?: any): Promise<AdamasConfig> {
     if (user.browser) Object.assign(config.browser, user.browser);
     if (user.agents) Object.assign(config.agents, user.agents);
   } catch { /* use defaults */ }
+
+  // 🔑 自动从 hermes 配置拉取 API key（优先级最低，不覆盖已有值）
+  if (!config.model.apiKey) {
+    const hermes = loadHermesApiKey();
+    if (hermes.apiKey) {
+      config.model.apiKey = hermes.apiKey;
+      if (!opts?.provider && hermes.provider) config.model.provider = hermes.provider as any;
+      if (!opts?.model && hermes.model) config.model.model = hermes.model;
+    }
+  }
 
   // CLI overrides
   if (opts?.provider) config.model.provider = opts.provider;
