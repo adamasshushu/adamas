@@ -32,17 +32,14 @@ async function main() {
 
   // 初始化 Agent
   let agent: any = null;
+  let agentModel = "unknown";
   try {
     const { AdamasAgent } = await import("@adamas/core");
     const { loadConfig } = await import("@adamas/cli/config");
-    const config = loadConfig();
-    agent = new AdamasAgent({
-      apiKey: config.apiKey || process.env.ADAMAS_API_KEY || "",
-      baseUrl: config.baseUrl || process.env.ADAMAS_BASE_URL || "",
-      model: config.model || process.env.ADAMAS_MODEL || "deepseek-chat",
-      provider: config.provider || "deepseek",
-    });
-    console.log(`[adamas] 🤖 Agent 就绪: ${config.model || "deepseek-chat"}`);
+    const config = await loadConfig();
+    agentModel = config.model.model;
+    agent = new AdamasAgent(config);
+    console.log(`[adamas] 🤖 Agent 就绪: ${agentModel}`);
   } catch (err: any) {
     console.warn(`[adamas] ⚠️ Agent 初始化失败: ${err.message}`);
     console.warn(`[adamas] 将使用简单回显模式`);
