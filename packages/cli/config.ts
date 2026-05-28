@@ -22,9 +22,10 @@ function loadEnvFile(filePath: string) {
     }
   } catch { /* file not found */ }
 }
-// 按优先级加载: 项目根 .env（packages/cli → ../..） → ~/.adamas/.env
+// 按优先级加载: 项目根 .env → ~/.adamas/.env → ~/.hermes/.env（wechat token 等）
 loadEnvFile(path.resolve(__currentDir, "../..", ".env"));
 loadEnvFile(path.resolve(process.env.HOME || "/tmp", ".adamas", ".env"));
+loadEnvFile(path.resolve(process.env.HOME || "/tmp", ".hermes", ".env"));
 
 /** 从 ~/.hermes/config.yaml 自动提取 API key（终极兜底） */
 function loadHermesApiKey(): { apiKey: string; provider?: string; model?: string; baseUrl?: string } {
