@@ -106,8 +106,10 @@ async function main() {
           cred.baseUrl,        // baseUrl
         );
 
-        if (!result.ok) {
-          console.error(`[adamas] 发送失败: ${result.errmsg}`);
+        if (result.ok) {
+          console.log(`[adamas] ✅ 发送成功`);
+        } else {
+          console.error(`[adamas] ❌ 发送失败: errcode=${result.errcode} errmsg=${result.errmsg}`);
         }
       }
     } catch (err: any) {

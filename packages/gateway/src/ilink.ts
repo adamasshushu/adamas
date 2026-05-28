@@ -198,7 +198,7 @@ export async function getUpdates(
 ): Promise<{ result: GetUpdatesResponse | null; error?: string }> {
   try {
     const body: Record<string, unknown> = {
-      ...baseInfo(),
+      base_info: baseInfo(),
       get_updates_buf: syncBuf,
     };
     const bodyStr = JSON.stringify(body);
@@ -268,7 +268,7 @@ export async function sendMessage(
   };
   if (contextToken) msg.context_token = contextToken;
 
-  const body: Record<string, unknown> = { ...baseInfo(), msg };
+  const body: Record<string, unknown> = { base_info: baseInfo(), msg };
   const bodyStr = JSON.stringify(body);
   const url = `${baseUrl}/ilink/bot/sendmessage`;
 
