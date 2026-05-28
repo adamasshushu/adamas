@@ -2,12 +2,9 @@
   "name": "@adamas/core",
   "version": "0.1.0",
   "main": "src/index.ts",
-  "scripts": { "build": "tsc" },
   "dependencies": {
     "ai": "^3.0.0",
     "@ai-sdk/openai": "^0.0.1",
-    "@ai-sdk/anthropic": "^0.0.1",
-    "@ai-sdk/deepseek": "^0.0.1",
     "zod": "^3.23"
   }
 }

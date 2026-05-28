@@ -6,17 +6,18 @@
     "packages/core",
     "packages/tools",
     "packages/gateway",
-    "packages/cli",
-    "packages/native/*"
+    "packages/cli"
   ],
   "scripts": {
-    "build": "bun run --filter '*' build",
-    "dev": "bun run packages/cli/index.ts",
-    "test": "bun test",
-    "adamas": "bun run packages/cli/index.ts"
+    "build:native": "cd packages/native/terminal && cargo build --release",
+    "build": "tsc -b",
+    "start": "npx tsx packages/cli/index.ts",
+    "adamas": "npx tsx packages/cli/index.ts",
+    "test": "echo 'tests coming'"
   },
   "devDependencies": {
     "typescript": "^5.5",
-    "@types/bun": "latest"
+    "tsx": "^4.0",
+    "@types/node": "^20"
   }
 }

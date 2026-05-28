@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext", 
-    "moduleResolution": "bundler",
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -16,6 +16,6 @@
       "@adamas/gateway": ["./packages/gateway/src"]
     }
   },
-  "include": ["packages/*/src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["packages/*/src/**/*.ts", "packages/cli/*.ts"],
+  "exclude": ["node_modules", "dist", "target"]
 }
