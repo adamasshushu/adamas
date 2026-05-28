@@ -74,10 +74,11 @@ program
   .description("Manage adamas configuration")
   .action(async () => {
     const home = process.env.HOME || "/tmp";
-    const path = `${home}/.adamas/config.yaml`;
-    console.log(`Config file: ${path}`);
+    const configPath = `${home}/.adamas/config.yaml`;
+    console.log(`Config file: ${configPath}`);
     try {
-      const content = await Bun.file(path).text();
+      const fs = await import("fs");
+      const content = fs.readFileSync(configPath, "utf-8");
       console.log(content);
     } catch {
       console.log("(no config file — using defaults)");
