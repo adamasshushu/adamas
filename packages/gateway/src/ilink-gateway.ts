@@ -1,145 +1,118 @@
 #!/usr/bin/env npx tsx
 /**
- * iLink 长轮询网关 — 持续拉取微信消息 → Agent 处理 → 回复
- * 用法: npx tsx packages/gateway/src/ilink-gateway.ts
+ * iLink 短轮询网关 V2 — 使用原生 https 替代 fetch 避免连接池共享
+ * 根因假设：Node.js fetch 的全局连接池导致 getupdates 和 sendmessage 共享连接
  */
 
 import * as fs from "fs";
+import * as https from "https";
 import * as path from "path";
-import { getUpdates, sendMessage, type ILinkCredentials } from "./ilink.js";
 
 const CRED_PATH = path.join(process.env.HOME || "/home/cyborg", ".adamas/weixin/credentials.json");
-const MAX_MSG_LEN = 2000;          // iLink 消息上限
-const POLL_FAIL_LIMIT = 10;
-const LOG_FILE = "/tmp/adamas-gateway.log";
+const ILINK_HOST = "ilinkai.weixin.qq.com";
+const MAX_MSG_LEN = 2000;
 
-// ── 单实例锁 ──
 const LOCK_FILE = "/tmp/adamas-gateway.lock";
 function acquireLock(): boolean {
-  try {
-    const fd = fs.openSync(LOCK_FILE, "wx");
-    fs.writeSync(fd, String(process.pid));
-    fs.closeSync(fd);
-    return true;
-  } catch { return false; }
+  try { const fd = fs.openSync(LOCK_FILE, "wx"); fs.writeSync(fd, String(process.pid)); fs.closeSync(fd); return true; }
+  catch { return false; }
 }
-function releaseLock() { try { fs.unlinkSync(LOCK_FILE); } catch {} }
 
-// ── 凭据 ──
-function loadCreds(): ILinkCredentials {
-  if (!fs.existsSync(CRED_PATH)) throw new Error(`凭据不存在: ${CRED_PATH}`);
-  const raw = JSON.parse(fs.readFileSync(CRED_PATH, "utf-8"));
+function loadCreds(): any {
+  return JSON.parse(fs.readFileSync(CRED_PATH, "utf-8"));
+}
+
+function log(msg: string) { console.log(`[${new Date().toISOString().slice(11,19)}] ${msg}`); }
+
+// ── 原生 HTTPS 请求（每次新连接，不共享池） ──
+function httpsPost(path: string, headers: Record<string,string>, body: string): Promise<{status: number, data: any}> {
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: ILINK_HOST,
+      path: path,
+      method: "POST",
+      headers: { ...headers, "Connection": "close" },
+      agent: new https.Agent({ keepAlive: false }),  // 禁用连接池！
+    }, (res) => {
+      let data = "";
+      res.on("data", (chunk) => data += chunk);
+      res.on("end", () => {
+        try { resolve({ status: res.statusCode || 0, data: JSON.parse(data) }); }
+        catch { resolve({ status: res.statusCode || 0, data: {} }); }
+      });
+    });
+    req.on("error", reject);
+    req.setTimeout(10000, () => { req.destroy(); reject(new Error("timeout")); });
+    req.write(body);
+    req.end();
+  });
+}
+
+function makeHeaders(token: string, cl: number): Record<string,string> {
   return {
-    accountId: raw.accountId, token: raw.token,
-    baseUrl: raw.baseUrl || "https://ilinkai.weixin.qq.com",
-    userId: raw.userId || "",
+    "Content-Type": "application/json",
+    "Content-Length": String(cl),
+    "Authorization": "Bearer " + token,
+    "AuthorizationType": "ilink_bot_token",
+    "iLink-App-Id": "bot",
+    "iLink-App-ClientVersion": "131584",
   };
 }
 
-// ── 日志 ──
-function log(msg: string) {
-  const ts = new Date().toISOString().slice(11, 19);
-  const line = `[${ts}] ${msg}`;
-  console.log(line);
-}
-
-// ── 截断长消息 ──
-function truncate(text: string, max: number): string {
-  if (text.length <= max) return text;
-  // 在 >>> 之前截断，保持语义完整
-  const sep = text.lastIndexOf("\n", max);
-  const cut = sep > max * 0.7 ? sep : max;
-  return text.slice(0, cut) + "\n\n…(消息过长已截断)";
-}
-
 async function main() {
-  // 单实例
-  if (!acquireLock()) {
-    console.error("[adamas] 已有网关进程在运行");
-    process.exit(1);
-  }
-  process.on("exit", releaseLock);
-  process.on("SIGINT", () => { releaseLock(); process.exit(); });
-  process.on("SIGTERM", () => { releaseLock(); process.exit(); });
+  if (!acquireLock()) { console.error("已有网关运行"); process.exit(1); }
 
   const cred = loadCreds();
-  log(`✅ 凭据: ${cred.accountId}`);
+  log(`✅ ${cred.accountId}`);
 
-  // Agent
-  let agent: any = null;
-  try {
-    const { AdamasAgent } = await import("@adamas/core");
-    const { loadConfig } = await import("@adamas/cli/config");
-    agent = new AdamasAgent(await loadConfig());
-    log(`🤖 Agent 就绪`);
-  } catch (err: any) {
-    log(`⚠️ Agent 不可用: ${err.message}`);
-  }
-
-  log("🚀 长轮询开始");
+  log("🚀 开始轮询 (原生https)");
   let syncBuf = "";
-  let failCount = 0;
-  let seenMsgs = new Set<string>();  // 去重
+  let seenMsgs = new Set<string>();
 
   while (true) {
+    // 1. getupdates
+    let messages: any[] = [];
     try {
-      const { result, error } = await getUpdates(cred.token, syncBuf, cred.baseUrl);
-
-      if (error) {
-        // "timeout" 是长轮询正常超时，不算错误
-        if (error.includes("timeout") || error.includes("aborted")) {
-          continue;  // 静默重试
-        }
-        failCount++;
-        log(`❌ 轮询错误 (${failCount}/${POLL_FAIL_LIMIT}): ${error}`);
-        if (failCount >= POLL_FAIL_LIMIT) { log("连续失败过多，退出"); process.exit(1); }
-        await sleep(3000);
-        continue;
-      }
-      failCount = 0;
-
-      if (!result) { await sleep(500); continue; }
-      if (result.getUpdatesBuf) syncBuf = result.getUpdatesBuf;
-
-      for (const msg of result.msgs) {
-        const text = msg.itemList?.find((i: any) => i.type === 1)?.text_item?.text || msg.text || "";
-        if (!text) continue;
-
-        // 去重
-        const msgKey = msg.messageId || `${msg.fromUserId}:${text}`;
-        if (seenMsgs.has(msgKey)) continue;
-        seenMsgs.add(msgKey);
-        if (seenMsgs.size > 1000) seenMsgs = new Set([...seenMsgs].slice(-200));
-
-        log(`📩 ${msg.fromUserId.slice(-15)}: ${text.slice(0, 80)}`);
-
-        // Agent 回复
-        let reply: string;
-        try {
-          reply = agent ? await agent.chat(text) : `[echo] ${text}`;
-        } catch (err: any) {
-          reply = `❌ ${err.message}`;
-        }
-        reply = truncate(reply, MAX_MSG_LEN);
-        log(`📤 ${reply.slice(0, 80)}`);
-
-        // 发送
-        try {
-          const sr = await sendMessage(cred.token, msg.fromUserId, reply, msg.contextToken, cred.accountId, cred.baseUrl);
-          log(sr.ok ? `✅ 已发送` : `❌ 发送失败: errcode=${sr.errcode} errmsg=${sr.errmsg}`);
-        } catch (err: any) {
-          log(`❌ 发送异常: ${err.message}`);
-        }
-      }
+      const body = JSON.stringify({ base_info: { channel_version: "2.2.0" }, get_updates_buf: syncBuf });
+      const h = { ...makeHeaders(cred.token, Buffer.byteLength(body, "utf-8")), "X-WECHAT-UIN": "test" };
+      const { data } = await httpsPost("/ilink/bot/getupdates", h, body);
+      if (data.get_updates_buf) syncBuf = data.get_updates_buf;
+      messages = data.msgs || [];
     } catch (err: any) {
-      failCount++;
-      log(`⚠️ 异常 (${failCount}/${POLL_FAIL_LIMIT}): ${err.message}`);
-      if (failCount >= POLL_FAIL_LIMIT) process.exit(1);
-      await sleep(3000);
+      if (!err.message.includes("timeout")) log(`轮询异常: ${err.message}`);
     }
+
+    // 2. 处理消息
+    for (const msg of messages) {
+      const text = msg.itemList?.find((i: any) => i.type === 1)?.text_item?.text || msg.text || "";
+      if (!text) continue;
+      const msgKey = msg.messageId || `${msg.fromUserId}:${text}`;
+      if (seenMsgs.has(msgKey)) continue;
+      seenMsgs.add(msgKey);
+      if (seenMsgs.size > 500) seenMsgs = new Set([...seenMsgs].slice(-100));
+
+      log(`📩 ${msg.fromUserId.slice(-15)}: ${text.slice(0,80)}`);
+
+      // 回复
+      const reply = `[adamas] ${text}`.slice(0, MAX_MSG_LEN);
+      log(`📤 ${reply.slice(0,80)}`);
+
+      // 3. sendmessage（独立连接）
+      try {
+        const sBody = JSON.stringify({
+          base_info: { channel_version: "2.2.0" },
+          msg: { from_user_id: "", to_user_id: msg.fromUserId, client_id: cred.accountId, message_type: 2, message_state: 2, item_list: [{ type: 1, text_item: { text: reply } }] }
+        });
+        const sH = makeHeaders(cred.token, Buffer.byteLength(sBody, "utf-8"));
+        const { data: sData } = await httpsPost("/ilink/bot/sendmessage", sH, sBody);
+        log(`✅ 已发送: ${JSON.stringify(sData)}`);
+      } catch (err: any) {
+        log(`❌ 发送失败: ${err.message}`);
+      }
+    }
+
+    await new Promise(r => setTimeout(r, 2000));
   }
 }
-
-function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
 main().catch(err => { console.error("致命:", err); process.exit(1); });

@@ -13,7 +13,7 @@ const ILINK_BASE_URL = "https://ilinkai.weixin.qq.com";
 const CHANNEL_VERSION = "2.2.0";
 const ILINK_APP_ID = "bot";
 const ILINK_APP_CLIENT_VERSION = (2 << 16) | (2 << 8) | 0; // 131584
-const LONG_POLL_TIMEOUT_MS = 35_000;
+const LONG_POLL_TIMEOUT_MS = 5_000;   // 短轮询用 5 秒
 const API_TIMEOUT_MS = 15_000;
 const QR_TIMEOUT_MS = 35_000;
 
@@ -24,14 +24,14 @@ function randomWechatUin(): string {
   return Buffer.from(String(v)).toString("base64");
 }
 
-function makeHeaders(token?: string, bodyStr?: string): Record<string, string> {
+function makeHeaders(token?: string, bodyStr?: string, skipUin?: boolean): Record<string, string> {
   const h: Record<string, string> = {
     "Content-Type": "application/json",
     "AuthorizationType": "ilink_bot_token",
-    "X-WECHAT-UIN": randomWechatUin(),
     "iLink-App-Id": ILINK_APP_ID,
     "iLink-App-ClientVersion": String(ILINK_APP_CLIENT_VERSION),
   };
+  if (!skipUin) h["X-WECHAT-UIN"] = randomWechatUin();
   if (bodyStr) h["Content-Length"] = String(Buffer.byteLength(bodyStr, "utf-8"));
   if (token) h["Authorization"] = `Bearer ${token}`;
   return h;
@@ -247,7 +247,7 @@ export async function getUpdates(
   }
 }
 
-/** 发送文本消息 */
+/** 发送文本消息 — 始终带随机 X-WECHAT-UIN（匹配 hermes 行为） */
 export async function sendMessage(
   token: string,
   toUserId: string,
@@ -274,7 +274,7 @@ export async function sendMessage(
 
   const resp = await fetch(url, {
     method: "POST",
-    headers: makeHeaders(token, bodyStr),
+    headers: makeHeaders(token, bodyStr),  // ★ 不再 skipUin，所有请求带随机 UIN
     body: bodyStr,
     signal: AbortSignal.timeout(API_TIMEOUT_MS),
   });
@@ -285,7 +285,8 @@ export async function sendMessage(
   }
 
   const data = await resp.json();
-  return { ok: data.ret === 0 || data.ret == null, errcode: data.errcode, errmsg: data.errmsg };
+  const result = { ok: data.ret === 0 || data.ret == null, errcode: data.errcode, errmsg: data.errmsg };
+  return result;
 }
 
 // ── 工具 ──
