@@ -4,7 +4,6 @@
   "main": "src/index.ts",
   "dependencies": {
     "zod": "^3.23",
-    "camoufox-js": "^2.4",
     "@adamas/core": "*"
   }
 }

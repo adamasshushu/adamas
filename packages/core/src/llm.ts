@@ -1,10 +1,7 @@
 // ── Adamas LLM Client ──
-//
-// 对接 Vercel AI SDK，统一 20+ 模型提供商接口
+// 原生 fetch 实现，零外部 AI SDK 依赖
+// 兼容 OpenAI / Anthropic / DeepSeek API
 
-import { generateText, type CoreMessage, type CoreTool } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createAnthropic } from "@ai-sdk/anthropic";
 import type { ModelConfig, ToolCall } from "./types";
 
 export interface GenerateInput {
@@ -25,56 +22,74 @@ export class AdamasLLM {
   }
 
   async generate(input: GenerateInput): Promise<GenerateOutput> {
-    // Vercel AI SDK — 自动处理 tool calling
-    const provider = this.createProvider();
-    const model = provider(this.config.model);
+    const { baseUrl, headers } = this.getEndpoint();
 
-    const messages: CoreMessage[] = input.messages.map(m => ({
-      role: m.role as CoreMessage["role"],
-      content: m.content,
-      ...(m.toolCalls ? { toolCalls: m.toolCalls } : {}),
-      ...(m.toolCallId ? { toolCallId: m.toolCallId } : {}),
-    }));
+    const body: any = {
+      model: this.config.model,
+      messages: input.messages.map(m => ({
+        role: m.role,
+        content: m.content,
+        ...(m.toolCalls ? { tool_calls: m.toolCalls } : {}),
+        ...(m.toolCallId ? { tool_call_id: m.toolCallId } : {}),
+      })),
+      max_tokens: this.config.maxTokens,
+      temperature: this.config.temperature,
+    };
 
-    const tools: Record<string, CoreTool> = {};
-    if (input.tools) {
-      for (const t of input.tools) {
-        tools[t.name] = {
-          description: t.description,
-          parameters: t.parameters as any,
-        };
-      }
+    if (input.tools?.length) {
+      body.tools = input.tools.map(t => ({
+        type: "function",
+        function: { name: t.name, description: t.description, parameters: t.parameters },
+      }));
+      body.tool_choice = "auto";
     }
 
-    const result = await generateText({
-      model,
-      messages,
-      tools: Object.keys(tools).length > 0 ? tools : undefined,
-      maxTokens: this.config.maxTokens,
-      temperature: this.config.temperature,
+    const resp = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify(body),
     });
 
+    if (!resp.ok) {
+      const err = await resp.text();
+      throw new Error(`LLM error ${resp.status}: ${err}`);
+    }
+
+    const data = await resp.json();
+    const choice = data.choices?.[0];
+    const msg = choice?.message;
+
     return {
-      content: result.text,
-      toolCalls: result.toolCalls?.map(tc => ({
-        id: tc.toolCallId,
-        name: tc.toolName,
-        args: tc.args as Record<string, unknown>,
+      content: msg?.content || "",
+      toolCalls: msg?.tool_calls?.map((tc: any) => ({
+        id: tc.id,
+        name: tc.function.name,
+        args: JSON.parse(tc.function.arguments),
       })),
     };
   }
 
-  private createProvider() {
+  private getEndpoint(): { baseUrl: string; headers: Record<string, string> } {
     switch (this.config.provider) {
-      case "openai":
-        return createOpenAI({ apiKey: this.config.apiKey });
       case "anthropic":
-        return createAnthropic({ apiKey: this.config.apiKey });
+        return {
+          baseUrl: "https://api.anthropic.com",
+          headers: {
+            "x-api-key": this.config.apiKey,
+            "anthropic-version": "2023-06-01",
+          },
+        };
       case "deepseek":
-        // DeepSeek uses OpenAI-compatible API
-        return createOpenAI({ apiKey: this.config.apiKey, baseURL: "https://api.deepseek.com" });
+        return {
+          baseUrl: "https://api.deepseek.com",
+          headers: { Authorization: `Bearer ${this.config.apiKey}` },
+        };
+      case "openai":
       default:
-        return createOpenAI({ apiKey: this.config.apiKey });
+        return {
+          baseUrl: "https://api.openai.com",
+          headers: { Authorization: `Bearer ${this.config.apiKey}` },
+        };
     }
   }
 }
