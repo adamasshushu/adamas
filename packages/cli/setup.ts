@@ -1,4 +1,7 @@
 // ── Setup wizard ──
+import * as fs from "fs";
+import * as path from "path";
+
 export async function runSetup() {
   const home = process.env.HOME || "/tmp";
   const dir = `${home}/.adamas`;
@@ -6,15 +9,37 @@ export async function runSetup() {
   console.log(`\n⚙  Adamas Setup\n`);
   console.log(`Creating ${dir}/ ...`);
 
-  // 创建目录
-  await Bun.write(`${dir}/.gitkeep`, "");
-  try { await Bun.write(`${dir}/config.yaml`, defaultConfig()); } catch { /* exists */ }
-  try { await Bun.write(`${dir}/SOUL.md`, defaultSoul()); } catch { /* exists */ }
+  fs.mkdirSync(dir, { recursive: true });
+
+  if (!fs.existsSync(`${dir}/config.yaml`)) {
+    fs.writeFileSync(`${dir}/config.yaml`, defaultConfig());
+    console.log("  ✅ config.yaml created");
+  } else {
+    console.log("  ⏭  config.yaml exists");
+  }
+
+  if (!fs.existsSync(`${dir}/SOUL.md`)) {
+    fs.writeFileSync(`${dir}/SOUL.md`, defaultSoul());
+    console.log("  ✅ SOUL.md created");
+  } else {
+    console.log("  ⏭  SOUL.md exists");
+  }
+
+  // Shell alias
+  const bashrc = `${home}/.bashrc`;
+  const aliasLine = `alias adamas="cd ${home}/adamas && npx tsx packages/cli/index.ts"`;
+  if (fs.existsSync(bashrc)) {
+    const content = fs.readFileSync(bashrc, "utf-8");
+    if (!content.includes("alias adamas=")) {
+      fs.appendFileSync(bashrc, `\n${aliasLine}\n`);
+      console.log("  ✅ shell alias added (~/.bashrc)");
+    }
+  }
 
   console.log(`\n✅ Setup complete!`);
   console.log(`   Config: ${dir}/config.yaml`);
   console.log(`   Soul:   ${dir}/SOUL.md`);
-  console.log(`\n   Run \`adamas chat\` to start.\n`);
+  console.log(`\n   Run \`source ~/.bashrc\` then \`adamas chat\` to start.\n`);
 }
 
 function defaultConfig(): string {

@@ -1,6 +1,7 @@
 // ── Config loader ──
+import * as fs from "fs";
+import * as yaml from "yaml";
 import type { AdamasConfig, ModelConfig } from "@adamas/core";
-import { parse as parseYaml } from "yaml";
 
 const DEFAULT_CONFIG: AdamasConfig = {
   model: {
@@ -16,21 +17,21 @@ const DEFAULT_CONFIG: AdamasConfig = {
 };
 
 export async function loadConfig(opts?: any): Promise<AdamasConfig> {
-  const config = { ...DEFAULT_CONFIG };
+  const config: AdamasConfig = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
 
   // 读取 ~/.adamas/config.yaml
   const home = process.env.HOME || "/tmp";
   const configPath = `${home}/.adamas/config.yaml`;
   try {
-    const yaml = await Bun.file(configPath).text();
-    const user = parseYaml(yaml) as Partial<AdamasConfig>;
+    const raw = fs.readFileSync(configPath, "utf-8");
+    const user = yaml.parse(raw) as Partial<AdamasConfig>;
     if (user.model) Object.assign(config.model, user.model);
     if (user.terminal) Object.assign(config.terminal, user.terminal);
     if (user.browser) Object.assign(config.browser, user.browser);
     if (user.agents) Object.assign(config.agents, user.agents);
   } catch { /* use defaults */ }
 
-  // CLI 覆盖
+  // CLI overrides
   if (opts?.provider) config.model.provider = opts.provider;
   if (opts?.model) config.model.model = opts.model;
 
@@ -40,7 +41,7 @@ export async function loadConfig(opts?: any): Promise<AdamasConfig> {
 export async function loadSoul(): Promise<string> {
   const home = process.env.HOME || "/tmp";
   try {
-    return await Bun.file(`${home}/.adamas/SOUL.md`).text();
+    return fs.readFileSync(`${home}/.adamas/SOUL.md`, "utf-8");
   } catch {
     return "You are Adamas, an AI assistant.";
   }

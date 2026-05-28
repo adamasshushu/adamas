@@ -1,10 +1,11 @@
-// ── Adamas File — 文件系统操作 ──
-//
-// Bun 原生文件 API（比 Node.js fs 快 2-3x）
+// ── Adamas File — 文件系统操作（Node.js fs） ──
+
+import * as fs from "fs";
+import * as path from "path";
 
 export class AdamasFile {
-  async read(path: string, offset = 1, limit = 500): Promise<string> {
-    const content = await Bun.file(path).text();
+  async read(filepath: string, offset = 1, limit = 500): Promise<string> {
+    const content = fs.readFileSync(filepath, "utf-8");
     const lines = content.split("\n");
     const start = offset - 1;
     const end = Math.min(start + limit, lines.length);
@@ -18,27 +19,37 @@ export class AdamasFile {
     return `${output}\n(total_lines: ${lines.length})`;
   }
 
-  async write(path: string, content: string): Promise<string> {
-    await Bun.write(path, content);
-    return `Written ${content.length} bytes to ${path}`;
+  async write(filepath: string, content: string): Promise<string> {
+    const dir = path.dirname(filepath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(filepath, content);
+    return `Written ${content.length} bytes to ${filepath}`;
   }
 
   async search(pattern: string, dir = ".", fileGlob?: string): Promise<string> {
-    const glob = new Bun.Glob(fileGlob || "**/*");
     const results: string[] = [];
+    const regex = new RegExp(pattern, "gm");
 
-    for await (const file of glob.scan(dir)) {
-      try {
-        const content = await Bun.file(file).text();
-        const regex = new RegExp(pattern, "gm");
-        let match;
-        while ((match = regex.exec(content)) !== null) {
-          const lineNum = content.substring(0, match.index).split("\n").length;
-          results.push(`${file}:${lineNum}: ${match[0]}`);
+    const walkDir = (currentDir: string) => {
+      const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(currentDir, entry.name);
+        if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules") {
+          walkDir(fullPath);
+        } else if (entry.isFile()) {
+          try {
+            const content = fs.readFileSync(fullPath, "utf-8");
+            let match;
+            while ((match = regex.exec(content)) !== null) {
+              const lineNum = content.substring(0, match.index).split("\n").length;
+              results.push(`${fullPath}:${lineNum}: ${match[0]}`);
+            }
+          } catch { /* skip binary */ }
         }
-      } catch { /* skip binary files */ }
-    }
+      }
+    };
 
+    walkDir(dir);
     return results.slice(0, 50).join("\n") || "No matches found";
   }
 }
