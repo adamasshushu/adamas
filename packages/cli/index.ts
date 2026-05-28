@@ -55,9 +55,10 @@ program
   .command("serve")
   .description("Start gateway server for messaging platforms")
   .option("-p, --port <port>", "Port number", "4000")
+  .option("-w, --wechaty", "Start WeChaty bot (QR code login)")
   .action(async (opts) => {
     const { startGateway } = await import("./gateway");
-    await startGateway(parseInt(opts.port));
+    await startGateway(parseInt(opts.port), opts.wechaty);
   });
 
 // ── cron ──

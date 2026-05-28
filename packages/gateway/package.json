@@ -2,6 +2,10 @@
   "name": "@adamas/gateway",
   "version": "0.1.0",
   "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./wechaty-bot": "./src/wechaty-bot.ts"
+  },
   "scripts": { "build": "tsc" },
   "dependencies": {
     "wechaty": "^1.20"
