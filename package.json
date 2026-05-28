@@ -1,0 +1,22 @@
+{
+  "name": "adamas",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/core",
+    "packages/tools",
+    "packages/gateway",
+    "packages/cli",
+    "packages/native/*"
+  ],
+  "scripts": {
+    "build": "bun run --filter '*' build",
+    "dev": "bun run packages/cli/index.ts",
+    "test": "bun test",
+    "adamas": "bun run packages/cli/index.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.5",
+    "@types/bun": "latest"
+  }
+}

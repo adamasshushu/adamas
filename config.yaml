@@ -1,0 +1,17 @@
+model:
+  provider: deepseek
+  model: deepseek-chat
+  temperature: 0.7
+  maxTokens: 8192
+
+terminal:
+  rtkEnabled: true
+  timeout: 180
+
+browser:
+  backend: camoufox
+  url: http://localhost:9377
+
+agents:
+  maxIterations: 30
+  maxToolCallsPerTurn: 5
