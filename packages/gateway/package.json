@@ -4,10 +4,12 @@
   "main": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./wechaty-bot": "./src/wechaty-bot.ts"
+    "./wechaty-bot": "./src/wechaty-bot.ts",
+    "./ilink": "./src/ilink.ts"
   },
   "scripts": { "build": "tsc" },
   "dependencies": {
-    "wechaty": "^1.20"
+    "wechaty": "^1.20",
+    "qrcode": "^1.5"
   }
 }

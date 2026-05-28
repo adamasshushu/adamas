@@ -61,6 +61,44 @@ program
     await startGateway(parseInt(opts.port), opts.wechaty);
   });
 
+// ── ilink ──
+program
+  .command("ilink")
+  .description("WeChat QR login via iLink Bot API")
+  .action(async () => {
+    const { qrLogin, saveCredentials } = await import("@adamas/gateway/ilink");
+    const QRCode = await import("qrcode");
+
+    console.log("[adamas] 🔑 iLink 微信扫码登录\n");
+
+    const cred = await qrLogin(480, 
+      (qr) => {
+        const data = qr.qrcodeUrl || qr.qrcode;
+        console.log("请用微信扫描以下二维码：");
+        console.log(data);
+        // ASCII 二维码
+        QRCode.toString(data, { type: "terminal", small: true }).then((s: string) => console.log(s));
+      },
+      (status) => {
+        if (status === "wait") process.stdout.write(".");
+        else if (status === "scaned") console.log("\n已扫码，请在微信确认...");
+        else if (status === "confirmed") console.log("\n✅ 登录成功！");
+        else if (status === "expired") console.log("\n码已过期，刷新中...");
+        else if (status === "redirect") console.log("\n重定向...");
+      }
+    );
+
+    if (!cred) {
+      console.log("\n❌ 登录超时或失败");
+      return;
+    }
+
+    saveCredentials(cred);
+    console.log(`\n账号: ${cred.accountId}`);
+    console.log(`Token: ${cred.token.slice(0, 12)}...`);
+    console.log(`凭据已保存至 ~/.adamas/weixin/credentials.json`);
+  });
+
 // ── cron ──
 program
   .command("cron <action>")
