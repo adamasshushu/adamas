@@ -10,6 +10,36 @@
 import type { Message, ToolCall, ToolDefinition, ToolContext, ToolResult, AdamasConfig, AgentState } from "./types";
 import { AdamasLLM } from "./llm";
 
+/** Zod schema → OpenAI JSON Schema (minimal converter) */
+function zodToJsonSchema(schema: any): Record<string, unknown> {
+  const typeName: string = schema._def?.typeName || "";
+  switch (typeName) {
+    case "ZodString":   return { type: "string" };
+    case "ZodNumber":   return { type: "number" };
+    case "ZodBoolean":  return { type: "boolean" };
+    case "ZodOptional":  return zodToJsonSchema(schema._def.innerType);
+    case "ZodArray":     return { type: "array", items: zodToJsonSchema(schema._def.type) };
+    case "ZodObject": {
+      const shape = schema._def.shape();
+      const required: string[] = [];
+      const properties: Record<string, unknown> = {};
+      for (const [key, val] of Object.entries(shape)) {
+        const inner: any = val as any;
+        if (inner._def?.typeName === "ZodOptional") {
+          properties[key] = { ...zodToJsonSchema(inner._def.innerType), description: inner._def.description };
+        } else {
+          properties[key] = { ...zodToJsonSchema(inner), description: inner._def?.description };
+          required.push(key);
+        }
+      }
+      const result: Record<string, unknown> = { type: "object", properties };
+      if (required.length) result.required = required;
+      return result;
+    }
+    default: return { type: "null" };
+  }
+}
+
 export class AdamasAgent {
   private llm: AdamasLLM;
   private tools: Map<string, ToolDefinition>;
@@ -50,7 +80,7 @@ export class AdamasAgent {
         tools: Array.from(this.tools.values()).map(t => ({
           name: t.name,
           description: t.description,
-          parameters: t.schema,
+          parameters: zodToJsonSchema(t.schema),
         })),
       });
 

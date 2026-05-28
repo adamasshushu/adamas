@@ -1,7 +1,30 @@
 // ── Config loader ──
 import * as fs from "fs";
+import * as path from "path";
+import { fileURLToPath } from "url";
 import * as yaml from "yaml";
 import type { AdamasConfig, ModelConfig } from "@adamas/core";
+
+// 获取当前文件目录（兼容 ESM __dirname 不可用的情况）
+const __currentDir = typeof __dirname !== "undefined"
+  ? __dirname
+  : path.dirname(fileURLToPath(import.meta.url));
+
+// 手动加载 .env（不依赖 dotenv 包）
+function loadEnvFile(filePath: string) {
+  try {
+    const content = fs.readFileSync(filePath, "utf-8");
+    for (const line of content.split("\n")) {
+      const match = line.match(/^\s*([^#=]+?)\s*=\s*(.+)\s*$/);
+      if (match && !process.env[match[1]]) {
+        process.env[match[1]] = match[2].replace(/^["']|["']$/g, "");
+      }
+    }
+  } catch { /* file not found */ }
+}
+// 按优先级加载: 项目根 .env（packages/cli → ../..） → ~/.adamas/.env
+loadEnvFile(path.resolve(__currentDir, "../..", ".env"));
+loadEnvFile(path.resolve(process.env.HOME || "/tmp", ".adamas", ".env"));
 
 const DEFAULT_CONFIG: AdamasConfig = {
   model: {

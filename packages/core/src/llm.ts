@@ -26,12 +26,20 @@ export class AdamasLLM {
 
     const body: any = {
       model: this.config.model,
-      messages: input.messages.map(m => ({
-        role: m.role,
-        content: m.content,
-        ...(m.toolCalls ? { tool_calls: m.toolCalls } : {}),
-        ...(m.toolCallId ? { tool_call_id: m.toolCallId } : {}),
-      })),
+      messages: input.messages.map(m => {
+        const msg: any = { role: m.role, content: m.content || null };
+        // 序列化内部 ToolCall → OpenAI tool_calls 格式
+        if (m.toolCalls && m.toolCalls.length > 0) {
+          msg.tool_calls = m.toolCalls.map(tc => ({
+            id: tc.id,
+            type: "function",
+            function: { name: tc.name, arguments: JSON.stringify(tc.args) },
+          }));
+        }
+        // 工具返回值
+        if (m.toolCallId) msg.tool_call_id = m.toolCallId;
+        return msg;
+      }),
       max_tokens: this.config.maxTokens,
       temperature: this.config.temperature,
     };
