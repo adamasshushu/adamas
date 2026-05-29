@@ -14,7 +14,8 @@ import * as fs from "fs";
 import chalk from "chalk";
 import ora, { Ora } from "ora";
 import boxen from "boxen";
-import { AdamasAgent, ToolRegistry, SkillManager, MemoryStore, getMemoryStore } from "@adamas/core";
+import { AdamasAgent, SkillManager, MemoryStore, getMemoryStore } from "@adamas/core";
+import { ToolRegistry } from "@adamas/tools";
 import { loadConfig, loadSoul } from "./config";
 
 const ADAMAS_HOME = path.resolve(process.env.HOME || "/tmp", ".adamas");
