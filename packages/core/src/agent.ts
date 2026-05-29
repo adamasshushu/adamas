@@ -8,6 +8,7 @@
 // 4. 重复直至 LLM 给出最终答案
 
 import type { Message, ToolCall, ToolDefinition, ToolContext, ToolResult, AdamasConfig, AgentState } from "./types";
+import type { SkillManager, MemoryStore } from "./index";
 import { AdamasLLM } from "./llm";
 
 /** Zod schema → OpenAI JSON Schema (minimal converter) */
@@ -42,17 +43,40 @@ function zodToJsonSchema(schema: any): Record<string, unknown> {
 
 export class AdamasAgent {
   private llm: AdamasLLM;
-  private tools: Map<string, ToolDefinition>;
+  private tools: Map<string, ToolDefinition> = new Map();
   private messages: Message[] = [];
   private state: AgentState = { phase: "idle" };
   private config: AdamasConfig;
   private iteration: number = 0;
+  private skillManager?: SkillManager;
+  private memoryStore?: MemoryStore;
+  private baseSoul: string = "";
+  private debugMode: boolean = false;
 
   constructor(config: AdamasConfig) {
     this.config = config;
     this.llm = new AdamasLLM(config.model);
-    this.tools = new Map();
   }
+
+  /** 设置 Skill Manager */
+  setSkillManager(sm: SkillManager): this {
+    this.skillManager = sm;
+    return this;
+  }
+
+  /** 设置 Memory Store */
+  setMemoryStore(ms: MemoryStore): this {
+    this.memoryStore = ms;
+    return this;
+  }
+
+  /** 切换 debug 模式 */
+  setDebug(enabled: boolean): this {
+    this.debugMode = enabled;
+    return this;
+  }
+
+  get debug(): boolean { return this.debugMode; }
 
   /** 注册工具 */
   register(tool: ToolDefinition): this {
@@ -60,9 +84,54 @@ export class AdamasAgent {
     return this;
   }
 
+  /** 检查工具是否存在 */
+  hasTool(name: string): boolean {
+    return this.tools.has(name);
+  }
+
+  /** 获取所有工具名 */
+  getToolNames(): string[] {
+    return Array.from(this.tools.keys());
+  }
+
   /** 设置系统提示词（SOUL.md） */
   setSystemPrompt(prompt: string): void {
-    this.messages = [{ role: "system", content: prompt }];
+    this.baseSoul = prompt;
+    this.rebuildSystemPrompt();
+  }
+
+  /** 重建系统提示，注入 skill 和 memory 上下文 */
+  private rebuildSystemPrompt() {
+    let fullPrompt = this.baseSoul;
+
+    // 注入记忆
+    if (this.memoryStore) {
+      const memCtx = this.memoryStore.getContextPrompt();
+      if (memCtx) fullPrompt += `\n\n${memCtx}`;
+    }
+
+    // 注入已加载的 skills
+    if (this.skillManager) {
+      const skillCtx = this.skillManager.getContextPrompt();
+      if (skillCtx) fullPrompt += `\n\n${skillCtx}`;
+    }
+
+    // 注入工具列表
+    const toolNames = this.getToolNames();
+    if (toolNames.length > 0) {
+      fullPrompt += `\n\n## Available Tools\n${toolNames.map(t => `- ${t}`).join("\n")}`;
+    }
+
+    if (this.messages.length > 0 && this.messages[0].role === "system") {
+      this.messages[0] = { role: "system", content: fullPrompt };
+    } else {
+      this.messages.unshift({ role: "system", content: fullPrompt });
+    }
+  }
+
+  /** 刷新上下文（skill/memory 变更后调用） */
+  refreshContext(): void {
+    this.rebuildSystemPrompt();
   }
 
   /** 执行一轮对话 */
@@ -141,5 +210,16 @@ export class AdamasAgent {
   /** 获取对话历史 */
   getMessages(): Message[] {
     return [...this.messages];
+  }
+
+  /** 清空对话历史（保留 system prompt） */
+  clearHistory(): void {
+    const sysMsg = this.messages.find(m => m.role === "system");
+    this.messages = sysMsg ? [sysMsg] : [];
+  }
+
+  /** 获取消息数量 */
+  getMessageCount(): number {
+    return this.messages.length;
   }
 }

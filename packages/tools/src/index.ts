@@ -8,6 +8,7 @@ import type { ToolDefinition, ToolContext } from "@adamas/core";
 import { AdamasTerminal } from "./terminal";
 import { AdamasBrowser } from "./browser";
 import { AdamasFile } from "./file";
+import { AdamasWebSearch } from "./web-search";
 
 export class ToolRegistry {
   private tools: Map<string, ToolDefinition> = new Map();
@@ -94,6 +95,26 @@ export class ToolRegistry {
       toolset: "file",
       schema: z.object({ path: z.string(), content: z.string() }),
       execute: async (args) => file.write(args.path, args.content),
+    });
+
+    // Web 工具
+    const web = new AdamasWebSearch();
+    registry.register({
+      name: "web_search",
+      description: "Search the web using DuckDuckGo. Returns titles and URLs.",
+      toolset: "web",
+      schema: z.object({
+        query: z.string().describe("Search query"),
+        limit: z.number().optional().describe("Max results (default 5)"),
+      }),
+      execute: async (args) => web.search(args.query, args.limit ?? 5),
+    });
+    registry.register({
+      name: "web_fetch",
+      description: "Fetch and extract text content from a URL",
+      toolset: "web",
+      schema: z.object({ url: z.string().describe("URL to fetch") }),
+      execute: async (args) => web.extractText(args.url),
     });
 
     return registry;

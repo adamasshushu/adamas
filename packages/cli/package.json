@@ -1,12 +1,19 @@
 {
   "name": "@adamas/cli",
   "version": "0.1.0",
-  "scripts": { "start": "npx tsx index.ts" },
-  "bin": { "adamas": "./index.ts" },
+  "scripts": {
+    "start": "npx tsx index.ts"
+  },
+  "bin": {
+    "adamas": "./index.ts"
+  },
   "dependencies": {
-    "commander": "^12.0",
-    "yaml": "^2.0",
     "@adamas/core": "*",
-    "@adamas/tools": "*"
+    "@adamas/tools": "*",
+    "boxen": "^8.0.1",
+    "chalk": "^4.1.2",
+    "commander": "^12.0",
+    "ora": "^9.4.0",
+    "yaml": "^2.0"
   }
 }
